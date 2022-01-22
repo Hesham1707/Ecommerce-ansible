@@ -1,0 +1,96 @@
+---
+ -  
+    hosts: all
+    name: 'install prequistes for elearning project'
+    become: true
+    tasks:
+        - 
+            name: install required packages
+            yum: 
+                name:
+                    - firewalld
+                    - mariadb-server
+                    - python-pip 
+                    - MySQL-python
+                    - httpd
+                    - php
+                    - php-mysql
+                    - git 
+                state: present
+        -
+            name: start and enable firewalld & mariadb
+            service:
+                name: '{{item}}'
+                state: started
+                enabled: true
+            with_items:
+            - firewalld
+            - mariadb
+            - httpd
+        -   
+            name: Clone repository to /var/www/html/
+            git:
+                repo: https://github.com/kodekloudhub/learning-app-ecommerce.git
+                dest: /var/www/html/
+                force: true
+
+        -
+            name: change index.html to index.php
+            replace:
+                path: /etc/httpd/conf/httpd.conf
+                regexp: 'DirectoryIndex index.html'
+                replace: 'DirectoryIndex index.php'
+        -
+            name: update index.php
+            replace:
+                path: /var/www/html/index.php
+                regexp: '172.20.1.101'
+                replace: 'localhost'
+        -
+            name: enable certain firewalld rules
+            firewalld:
+                port: '{{item}}'
+                zone: public
+                permanent: yes
+                state: enabled
+            loop:
+            - 3386/tcp
+            - 80/tcp
+        - 
+            name: reload service firewalld to apply rules
+            systemd:
+                name: firewalld
+                state: reloaded
+        - 
+            name: Create new database and notify handler to insert data script
+            mysql_db:
+                name: ecomdb
+                state: present
+            notify:
+                - Import db-load-script.sql
+        -   
+            name: Create database user 
+            mysql_user:
+                name: ecomuser
+                host: localhost
+                password: 'ecompassword'
+                priv: '*.*:ALL'
+                state: present
+        -
+            name: Curl localhost to verify changes
+            uri:
+                url: http://localhost
+                return_content: yes
+                
+    handlers:
+        -
+            name: handler to insert data into database upon creation
+            mysql_db:
+                state: import
+                name: ecomdb
+                target: /var/www/html/assets/db-load-script.sql
+
+
+
+
+
